@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Map, Users, Calendar, ShoppingBag, Menu, X, Plus, Check} from 'lucide-react';
+import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import axios from 'axios';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('roommates');
@@ -427,13 +429,102 @@ const ProfileEditModal = ({ profile, onSave, onClose }) => {
   );
 };
 
-// Placeholder components for other screens
-const MapScreen = () => (
-  <div className="flex flex-col p-6">
-    <h2 className="text-3xl font-bold text-blue-800 mb-6">Campus Map</h2>
-    <p>Map functionality coming soon!</p>
-  </div>
-);
+const MapScreen = () => {
+  const [userLocation, setUserLocation] = useState(null);
+  const [setMap] = useState(null);
+  const [places, setPlaces] = useState([]);
+  const [selectedPlace, setSelectedPlace] = useState(null);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: "AIzaSyCX0qGpzsSJX9LnCxGExXLf5Pi4wyX_Tq8"
+  });
+
+  const mapRef = useRef(null);
+  const onMapLoad = useCallback((map) => {
+    mapRef.current = map;
+    setMap(map);
+  }, []);
+
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+        },
+        (error) => {
+          console.error("Error getting user location:", error);
+        }
+      );
+    } else {
+      console.error("Geolocation is not supported by this browser.");
+    }
+  };
+
+  const searchNearbyPlaces = async (type) => {
+    if (!userLocation) return;
+
+    try {
+      const response = await axios.get(
+        `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.lat},${userLocation.lng}&radius=1500&type=${type}&key=YOUR_GOOGLE_MAPS_API_KEY`
+      );
+      setPlaces(response.data.results);
+    } catch (error) {
+      console.error("Error fetching nearby places:", error);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <h2 className="text-3xl font-bold text-blue-800 mb-4">Campus Map</h2>
+      <div className="mb-4">
+        <button 
+          onClick={getUserLocation}
+          className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+        >
+          Get My Location
+        </button>
+        <button 
+          onClick={() => searchNearbyPlaces('restaurant')}
+          className="bg-green-500 text-white px-4 py-2 rounded mr-2"
+        >
+          Find Restaurants
+        </button>
+        <button 
+          onClick={() => searchNearbyPlaces('cafe')}
+          className="bg-yellow-500 text-white px-4 py-2 rounded"
+        >
+          Find Cafes
+        </button>
+      </div>
+      {isLoaded ? (
+        <GoogleMap
+          mapContainerStyle={{ width: '100%', height: '400px' }}
+          center={userLocation || { lat: 0, lng: 0 }}
+          zoom={14}
+          onLoad={onMapLoad}
+        >
+          {userLocation && <Marker position={userLocation} />}
+          {places.map((place) => (
+            <Marker
+              key={place.place_id}
+              position={place.geometry.location}
+              onClick={() => setSelectedPlace(place)}
+            />
+          ))}
+        </GoogleMap>
+      ) : <div>Loading...</div>}
+      {selectedPlace && (
+        <div className="mt-4 p-4 bg-white rounded shadow">
+          <h3 className="font-bold">{selectedPlace.name}</h3>
+          <p>{selectedPlace.vicinity}</p>
+          <p>Rating: {selectedPlace.rating}</p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MarketScreen = () => (
   <div className="flex flex-col p-6">
