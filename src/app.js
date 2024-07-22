@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Map, Users, Calendar, ShoppingBag, Menu, X, Plus, Check} from 'lucide-react';
-import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
-import axios from 'axios';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('roommates');
@@ -15,15 +14,16 @@ const App = () => {
     isMatched: false
   });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [events, setEvents] = useState([]);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'roommates':
         return <RoommatesScreen userProfile={userProfile} setUserProfile={setUserProfile} />;
       case 'events':
-        return <EventsScreen userProfile={userProfile} />;
+        return <EventsScreen userProfile={userProfile} events={events} setEvents={setEvents} />;
       case 'map':
-        return <MapScreen />;
+        return <MapScreen events={events} />;
       case 'market':
         return <MarketScreen />;
       case 'more':
@@ -289,7 +289,8 @@ const AddEventModal = ({ onClose, onAddEvent }) => {
     title: '',
     date: '',
     time: '',
-    location: ''
+    location: '',
+    address: '' // New field for address
   });
 
   const handleSubmit = (e) => {
@@ -307,42 +308,13 @@ const AddEventModal = ({ onClose, onAddEvent }) => {
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* ... other fields ... */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Event Title</label>
+            <label className="block text-sm font-medium text-gray-700">Address</label>
             <input
               type="text"
-              value={newEvent.title}
-              onChange={(e) => setNewEvent({...newEvent, title: e.target.value})}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Date</label>
-            <input
-              type="date"
-              value={newEvent.date}
-              onChange={(e) => setNewEvent({...newEvent, date: e.target.value})}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Time</label>
-            <input
-              type="time"
-              value={newEvent.time}
-              onChange={(e) => setNewEvent({...newEvent, time: e.target.value})}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Location</label>
-            <input
-              type="text"
-              value={newEvent.location}
-              onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
+              value={newEvent.address}
+              onChange={(e) => setNewEvent({...newEvent, address: e.target.value})}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
               required
             />
@@ -429,15 +401,17 @@ const ProfileEditModal = ({ profile, onSave, onClose }) => {
   );
 };
 
-const MapScreen = () => {
+const MapScreen = ({ events }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [map, setMap] = useState(null);
   const [places, setPlaces] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [eventMarkers, setEventMarkers] = useState([]);
 
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyCX0qGpzsSJX9LnCxGExXLf5Pi4wyX_Tq8"
+    googleMapsApiKey: "AIzaSyCX0qGpzsSJX9LnCxGExXLf5Pi4wyX_Tq8",
+    libraries: ['places']
   });
 
   const mapRef = useRef(null);
@@ -446,12 +420,29 @@ const MapScreen = () => {
     setMap(map);
   }, []);
 
-  // Use map once
   useEffect(() => {
-    if (map) {
-      map.setZoom(14);
+    if (isLoaded && events) {
+      const geocoder = new window.google.maps.Geocoder();
+      const markers = events.map(event => {
+        return new Promise((resolve) => {
+          geocoder.geocode({ address: event.address }, (results, status) => {
+            if (status === 'OK') {
+              resolve({
+                position: results[0].geometry.location,
+                event: event
+              });
+            } else {
+              resolve(null);
+            }
+          });
+        });
+      });
+
+      Promise.all(markers).then(results => {
+        setEventMarkers(results.filter(result => result !== null));
+      });
     }
-  }, [map]);
+  }, [isLoaded, events]);
 
   const getUserLocation = () => {
     if (navigator.geolocation) {
@@ -469,32 +460,40 @@ const MapScreen = () => {
     }
   };
 
-  const searchNearbyPlaces = async (type) => {
-    if (!userLocation) return;
+  const searchNearbyPlaces = (type) => {
+    if (!map || !userLocation) return;
 
-    try {
-      const response = await axios.get(
-        `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.lat},${userLocation.lng}&radius=1500&type=${type}&key=YOUR_GOOGLE_MAPS_API_KEY`
-      );
-      setPlaces(response.data.results);
-    } catch (error) {
-      console.error("Error fetching nearby places:", error);
-    }
+    const service = new window.google.maps.places.PlacesService(map);
+    const request = {
+      location: userLocation,
+      radius: 1500,
+      type: [type]
+    };
+
+    service.nearbySearch(request, (results, status) => {
+      if (status === window.google.maps.places.PlacesServiceStatus.OK) {
+        setPlaces(results);
+      }
+    });
   };
 
+  
+  if (loadError) return <div>Error loading maps</div>;
+  if (!isLoaded) return <div>Loading...</div>;
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full p-4">
       <h2 className="text-3xl font-bold text-blue-800 mb-4">Campus Map</h2>
-      <div className="mb-4">
+      <div className="mb-4 space-x-2">
         <button 
           onClick={getUserLocation}
-          className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+          className="bg-blue-500 text-white px-4 py-2 rounded"
         >
           Get My Location
         </button>
         <button 
           onClick={() => searchNearbyPlaces('restaurant')}
-          className="bg-green-500 text-white px-4 py-2 rounded mr-2"
+          className="bg-green-500 text-white px-4 py-2 rounded"
         >
           Find Restaurants
         </button>
@@ -505,33 +504,48 @@ const MapScreen = () => {
           Find Cafes
         </button>
       </div>
-      {isLoaded ? (
-        <GoogleMap
-          mapContainerStyle={{ width: '100%', height: '400px' }}
-          center={userLocation || { lat: 0, lng: 0 }}
-          zoom={14}
-          onLoad={onMapLoad}
-        >
-          {userLocation && <Marker position={userLocation} />}
-          {places.map((place) => (
-            <Marker
-              key={place.place_id}
-              position={place.geometry.location}
-              onClick={() => setSelectedPlace(place)}
-            />
-          ))}
-        </GoogleMap>
-      ) : <div>Loading...</div>}
-      {selectedPlace && (
-        <div className="mt-4 p-4 bg-white rounded shadow">
-          <h3 className="font-bold">{selectedPlace.name}</h3>
-          <p>{selectedPlace.vicinity}</p>
-          <p>Rating: {selectedPlace.rating}</p>
-        </div>
-      )}
+      <GoogleMap
+        mapContainerStyle={{ width: '100%', height: '400px' }}
+        center={userLocation || { lat: 0, lng: 0 }}
+        zoom={14}
+        onLoad={onMapLoad}
+      >
+        {userLocation && <Marker position={userLocation} />}
+        {places.map((place) => (
+          <Marker
+            key={place.place_id}
+            position={place.geometry.location}
+            onClick={() => setSelectedPlace(place)}
+            icon="http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+          />
+        ))}
+        {eventMarkers.map((marker, index) => (
+          <Marker
+            key={index}
+            position={marker.position}
+            onClick={() => setSelectedPlace(marker.event)}
+            icon="http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+          />
+        ))}
+        {selectedPlace && (
+          <InfoWindow
+            position={selectedPlace.geometry ? selectedPlace.geometry.location : selectedPlace.position}
+            onCloseClick={() => setSelectedPlace(null)}
+          >
+            <div>
+              <h3 className="font-bold">{selectedPlace.name || selectedPlace.title}</h3>
+              <p>{selectedPlace.vicinity || selectedPlace.address}</p>
+              {selectedPlace.rating && <p>Rating: {selectedPlace.rating}</p>}
+              {selectedPlace.date && <p>Date: {selectedPlace.date}</p>}
+              {selectedPlace.time && <p>Time: {selectedPlace.time}</p>}
+            </div>
+          </InfoWindow>
+        )}
+      </GoogleMap>
     </div>
   );
 };
+
 
 const MarketScreen = () => (
   <div className="flex flex-col p-6">
