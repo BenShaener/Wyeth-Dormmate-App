@@ -461,7 +461,7 @@ const MapScreen = ({ events }) => {
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyCX0qGpzsSJX9LnCxGExXLf5Pi4wyX_Tq8",
+    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
     libraries: ['places']
   });
 
@@ -477,12 +477,13 @@ const MapScreen = ({ events }) => {
       const markers = events.map(event => {
         return new Promise((resolve) => {
           geocoder.geocode({ address: event.address }, (results, status) => {
-            if (status === 'OK') {
+            if (status === 'OK' && results && results[0]) {
               resolve({
                 position: results[0].geometry.location,
                 event: event
               });
             } else {
+              console.error('Geocode was not successful for the following reason: ' + status);
               resolve(null);
             }
           });
@@ -528,7 +529,6 @@ const MapScreen = ({ events }) => {
     });
   };
 
-  
   if (loadError) return <div>Error loading maps</div>;
   if (!isLoaded) return <div>Loading...</div>;
 
@@ -580,7 +580,11 @@ const MapScreen = ({ events }) => {
         ))}
         {selectedPlace && (
           <InfoWindow
-            position={selectedPlace.geometry ? selectedPlace.geometry.location : selectedPlace.position}
+            position={
+              selectedPlace.geometry 
+                ? selectedPlace.geometry.location 
+                : selectedPlace.position || { lat: 0, lng: 0 }
+            }
             onCloseClick={() => setSelectedPlace(null)}
           >
             <div>
