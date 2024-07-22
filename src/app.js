@@ -431,7 +431,7 @@ const ProfileEditModal = ({ profile, onSave, onClose }) => {
 
 const MapScreen = () => {
   const [userLocation, setUserLocation] = useState(null);
-  const [setMap] = useState(null);
+  const [map, setMap] = useState(null);
   const [places, setPlaces] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null);
 
