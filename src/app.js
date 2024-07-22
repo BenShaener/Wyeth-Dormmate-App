@@ -461,7 +461,7 @@ const MapScreen = ({ events }) => {
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
+    googleMapsApiKey: "AIzaSyCX0qGpzsSJX9LnCxGExXLf5Pi4wyX_Tq8",
     libraries: ['places']
   });
 
