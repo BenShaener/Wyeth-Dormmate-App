@@ -446,6 +446,13 @@ const MapScreen = () => {
     setMap(map);
   }, []);
 
+  // Use map once
+  useEffect(() => {
+    if (map) {
+      map.setZoom(14);
+    }
+  }, [map]);
+
   const getUserLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
