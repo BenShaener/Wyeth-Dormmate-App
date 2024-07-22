@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Map, Users, Calendar, ShoppingBag, Menu, X, Plus, Check} from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { saveToLocalStorage, loadFromLocalStorage } from './storage'
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('roommates');
-  const [userProfile, setUserProfile] = useState({
+  const [userProfile, setUserProfile] = useState(loadFromLocalStorage('userProfile') || {
     id: 'currentUserId',
     name: 'Your Name',
     major: 'Your Major',
@@ -13,8 +14,16 @@ const App = () => {
     profilePicture: '/api/placeholder/100/100',
     isMatched: false
   });
+  const [events, setEvents] = useState(loadFromLocalStorage('events') || []);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [events, setEvents] = useState([]);
+
+  useEffect(() => {
+    saveToLocalStorage('userProfile', userProfile);
+  }, [userProfile]);
+
+  useEffect(() => {
+    saveToLocalStorage('events', events);
+  }, [events]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -86,7 +95,7 @@ const App = () => {
 const RoommatesScreen = ({ userProfile, setUserProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRoommate, setSelectedRoommate] = useState(null);
-  const [roommates, setRoommates] = useState([
+  const [roommates, setRoommates] = useState(loadFromLocalStorage('roommates') || [
     { id: 1, name: 'Alex', major: 'Computer Science', year: 'Sophomore', interests: ['Gaming', 'Coding', 'Hiking'], profilePicture: '/api/placeholder/100/100', isMatched: false },
     { id: 2, name: 'Sam', major: 'Biology', year: 'Junior', interests: ['Reading', 'Yoga', 'Cooking'], profilePicture: '/api/placeholder/100/100', isMatched: false },
     { id: 3, name: 'Jordan', major: 'Art History', year: 'Freshman', interests: ['Painting', 'Photography', 'Traveling'], profilePicture: '/api/placeholder/100/100', isMatched: false },
@@ -94,6 +103,10 @@ const RoommatesScreen = ({ userProfile, setUserProfile }) => {
     { id: 5, name: 'Casey', major: 'Psychology', year: 'Junior', interests: ['Theater', 'Volunteering', 'Meditation'], profilePicture: '/api/placeholder/100/100', isMatched: false },
     { id: 6, name: 'Morgan', major: 'Business', year: 'Sophomore', interests: ['Entrepreneurship', 'Sports', 'Networking'], profilePicture: '/api/placeholder/100/100', isMatched: false },
   ]);
+
+  useEffect(() => {
+    saveToLocalStorage('roommates', roommates);
+  }, [roommates]);
 
   const filteredRoommates = roommates.filter(roommate =>
     (roommate.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -177,35 +190,34 @@ const RoommateProfileModal = ({ roommate, onClose, onMatch, isMatched }) => (
   </div>
 );
 
-const EventsScreen = ({ userProfile }) => {
-  const [events, setEvents] = useState([
-    { id: 1, title: 'Campus Movie Night', date: '2024-07-26', time: '8:00 PM', location: 'Student Center', rsvps: [] },
-    { id: 2, title: 'Volunteer Fair', date: '2024-07-27', time: '10:00 AM', location: 'Quad', rsvps: [] },
-    { id: 3, title: 'Study Group - CS101', date: '2024-07-28', time: '2:00 PM', location: 'Library Room 202', rsvps: [] },
-    { id: 4, title: 'Club Rush', date: '2024-07-29', time: '11:00 AM', location: 'Main Hall', rsvps: [] },
-    { id: 5, title: 'Guest Lecture: AI and Ethics', date: '2024-07-30', time: '4:00 PM', location: 'Auditorium', rsvps: [] },
-  ]);
+const EventsScreen = ({ userProfile, events, setEvents }) => {
 
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [notification, setNotification] = useState(null);
 
   const addEvent = (newEvent) => {
-    setEvents([...events, { ...newEvent, id: events.length + 1, rsvps: [] }]);
+    const updatedEvents = [...events, { ...newEvent, id: Date.now(), rsvps: [] }];
+    setEvents(updatedEvents);
     setShowAddEventModal(false);
     setNotification("New event added successfully!");
   };
 
   const handleRSVP = (eventId) => {
-    setEvents(events.map(event => 
-      event.id === eventId 
-        ? { ...event, rsvps: event.rsvps.includes(userProfile.id) 
-            ? event.rsvps.filter(id => id !== userProfile.id) 
-            : [...event.rsvps, userProfile.id] }
+    const updatedEvents = events.map(event =>
+      event.id === eventId
+        ? {
+            ...event,
+            rsvps: event.rsvps.includes(userProfile.id)
+              ? event.rsvps.filter(id => id !== userProfile.id)
+              : [...event.rsvps, userProfile.id]
+          }
         : event
-    ));
+    );
+    setEvents(updatedEvents);
     setNotification("You will be notified with more details about this event when they are available.");
   };
+
 
   useEffect(() => {
     if (notification) {
@@ -308,7 +320,46 @@ const AddEventModal = ({ onClose, onAddEvent }) => {
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* ... other fields ... */}
+        <div>
+            <label className="block text-sm font-medium text-gray-700">Event Title</label>
+            <input
+              type="text"
+              value={newEvent.title}
+              onChange={(e) => setNewEvent({...newEvent, title: e.target.value})}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Date</label>
+            <input
+              type="date"
+              value={newEvent.date}
+              onChange={(e) => setNewEvent({...newEvent, date: e.target.value})}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Time</label>
+            <input
+              type="time"
+              value={newEvent.time}
+              onChange={(e) => setNewEvent({...newEvent, time: e.target.value})}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Location</label>
+            <input
+              type="text"
+              value={newEvent.location}
+              onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+              required
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Address</label>
             <input
