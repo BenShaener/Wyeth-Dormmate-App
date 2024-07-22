@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Map, Users, Calendar, ShoppingBag, Menu, X, Plus, Check, Edit2 } from 'lucide-react';
+import { Map, Users, Calendar, ShoppingBag, Menu, X, Plus, Check} from 'lucide-react';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('roommates');
