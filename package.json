@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "lucide-react": "^0.414.0",
+    "vercel": "^35.1.0"
+  }
+}
